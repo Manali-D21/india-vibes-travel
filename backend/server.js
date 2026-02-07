@@ -11,44 +11,46 @@ const app = express();
 /* -------------------- Middleware -------------------- */
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173", // local Vite dev
-      "http://localhost:3000",
-      "https://*.vercel.app", // allows all Vercel preview & production domains
-      // Add your real frontend URL after first deploy, example:
-      "https://india-vibes-travel.vercel.app",
-
-      // 'https://india-vibes-frontend.vercel.app',
-    ],
+    origin: "*", // ✅ safest for deployment
     methods: ["GET", "POST"],
-    credentials: true,
-    allowedHeaders: ["Content-Type"],
-  }),
+  })
 );
 
 app.use(express.json({ limit: "1mb" }));
+
+/* -------------------- Root Route (IMPORTANT) -------------------- */
+app.get("/", (req, res) => {
+  res.send("🚀 Vibes AI backend is running");
+});
+
+/* -------------------- Health Check -------------------- */
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    model: "gemini-2.5-flash",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 /* -------------------- API Key -------------------- */
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 if (!GEMINI_API_KEY) {
-  console.warn(
-    "⚠️ GEMINI_API_KEY not found in .env - using fallback responses",
-  );
+  console.warn("⚠️ GEMINI_API_KEY not found – using fallback responses");
 }
 
 /* -------------------- Gemini Init -------------------- */
-let genAI = null;
 let model = null;
 
 if (GEMINI_API_KEY) {
   try {
-    genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash", // ✅ Using current stable fast model
+      model: "gemini-2.5-flash",
     });
   } catch (err) {
-    console.warn("⚠️ Failed to initialize Gemini - using fallback responses");
+    console.warn("⚠️ Gemini init failed – fallback enabled");
   }
 }
 
@@ -78,41 +80,31 @@ If the user asks something NOT related to India travel, reply:
 function getFallbackResponse(message) {
   const msg = message.toLowerCase();
 
-  if (msg.includes("kerala") || msg.includes("backwater")) {
-    return "Kerala's backwaters are absolutely magical! 🛶 Consider staying in a traditional houseboat in Alleppey or Kumarakom. The best time to visit is October to March when the weather is pleasant. You'll love the peaceful canals, coconut groves, and authentic Kerala cuisine! ✨";
+  if (msg.includes("kerala")) {
+    return "Kerala’s backwaters are magical 🛶 Visit Alleppey or Kumarakom between Oct–Mar for the best experience ✨";
   }
 
-  if (
-    msg.includes("rajasthan") ||
-    msg.includes("jaipur") ||
-    msg.includes("udaipur")
-  ) {
-    return "Rajasthan is a treasure trove of royal heritage! 🏰 Don't miss the Pink City Jaipur with its stunning Amber Fort, the romantic lake city Udaipur with its palaces, and the golden city Jaisalmer with its desert safari experiences. October to March is perfect for exploring! 👑";
+  if (msg.includes("rajasthan")) {
+    return "Rajasthan is royal and colorful 👑 Jaipur, Udaipur & Jaisalmer are must-visits from Oct–Mar 🏰";
   }
 
-  if (msg.includes("goa") || msg.includes("beach")) {
-    return "Goa offers the perfect blend of relaxation and adventure! 🏖️ North Goa has vibrant nightlife and water sports at Baga and Calangute beaches, while South Goa offers peaceful stretches like Palolem and Agonda. Try the delicious seafood and enjoy the Portuguese-influenced architecture! 🌴";
+  if (msg.includes("goa")) {
+    return "Goa is perfect for beaches & fun 🏖️ North Goa for nightlife, South Goa for peace 🌴";
   }
 
-  if (
-    msg.includes("himachal") ||
-    msg.includes("mountains") ||
-    msg.includes("manali") ||
-    msg.includes("shimla")
-  ) {
-    return "Himachal Pradesh is a paradise for mountain lovers! 🏔️ Manali offers adventure sports and stunning valleys, Shimla has colonial charm and cool weather, and Dharamshala provides spiritual vibes with Tibetan culture. Best visited from March to June and September to November! 🌲";
+  if (msg.includes("himachal") || msg.includes("manali")) {
+    return "Himachal is a mountain paradise 🏔️ Best time: Mar–Jun & Sep–Nov 🌲";
   }
 
-  if (msg.includes("food") || msg.includes("cuisine")) {
-    return "Indian cuisine is incredibly diverse! 🍛 Try authentic South Indian dosas and sambhar, North Indian butter chicken and naan, Rajasthani dal baati churma, Bengali fish curry, and don't miss street food like pani puri, vada pav, and kulfi! Each region has its unique flavors! 🌶️";
+  if (msg.includes("food")) {
+    return "Indian food is super diverse 🍛 Don’t miss dosas, butter chicken, street food & sweets 😋";
   }
 
-  if (msg.includes("budget") || msg.includes("cheap") || msg.includes("cost")) {
-    return "India is incredibly budget-friendly! 💰 You can stay in hostels for ₹500-1500/night, eat delicious meals for ₹100-300, and travel by trains/buses affordably. For mid-range comfort, budget ₹2000-4000/day. Luxury experiences are also very affordable compared to western countries! 🚂";
+  if (msg.includes("budget")) {
+    return "India is budget-friendly 💰 ₹1500–3000/day is enough for a great trip 🚆";
   }
 
-  // General India travel response
-  return "India is an incredible destination with something for everyone! 🇮🇳 From the beaches of Goa to the mountains of Himachal, from Kerala's backwaters to Rajasthan's deserts, from Delhi's history to Mumbai's energy - each place offers unique experiences. What type of experience are you looking for - adventure, relaxation, culture, or food? ✨";
+  return "India has something for everyone 🇮🇳 Beaches, mountains, history & food — what do you want to explore? ✨";
 }
 
 /* -------------------- Chat Endpoint -------------------- */
@@ -124,23 +116,17 @@ app.post("/ai-chat", async (req, res) => {
       return res.status(400).json({ reply: "Please send a message 😊" });
     }
 
-    // If no AI model available, use fallback responses
+    // Fallback if Gemini unavailable
     if (!model) {
       return res.json({ reply: getFallbackResponse(message) });
     }
 
-    /* ---- Build Gemini-safe history ---- */
     const history = [
-      {
-        role: "user",
-        parts: [{ text: SYSTEM_PROMPT }],
-      },
-      ...conversation
-        .filter((m) => m?.text?.trim())
-        .map((m) => ({
-          role: m.role === "user" ? "user" : "model",
-          parts: [{ text: m.text }],
-        })),
+      { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
+      ...conversation.map((m) => ({
+        role: m.role === "user" ? "user" : "model",
+        parts: [{ text: m.text }],
+      })),
     ];
 
     const chat = model.startChat({
@@ -148,42 +134,20 @@ app.post("/ai-chat", async (req, res) => {
       generationConfig: {
         temperature: 0.75,
         topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 1000,
+        maxOutputTokens: 800,
       },
     });
 
     const result = await chat.sendMessage(message);
-    let reply = result.response.text().trim();
-
-    reply = reply.replace(/\n{3,}/g, "\n\n");
+    const reply = result.response.text().trim();
 
     res.json({ reply });
   } catch (err) {
-    console.error("Gemini API error:", err);
-
-    let userMessage = "Sorry, something went wrong 😔 Please try again.";
-
-    if (err?.message?.includes("API_KEY")) {
-      userMessage = "Gemini API key issue — please contact support.";
-    } else if (err?.status === 429) {
-      userMessage = "Too many requests ⏳ Please wait and try again.";
-    } else if (err?.message?.includes("safety")) {
-      userMessage = "That request was blocked by safety filters 😊";
-    }
-
-    res.status(500).json({ reply: userMessage });
+    console.error("Gemini error:", err);
+    res.status(500).json({
+      reply: "Something went wrong 😔 Please try again.",
+    });
   }
-});
-
-/* -------------------- Health Check -------------------- */
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    model: "gemini-2.5-flash",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
 });
 
 /* -------------------- Server -------------------- */
@@ -191,9 +155,4 @@ const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Vibes AI backend running on port ${PORT}`);
-  console.log(`   → http://localhost:${PORT}`);
-  console.log(`   → Health: http://localhost:${PORT}/health`);
-  app.get("/", (req, res) => {
-    res.send("Backend is running 🚀");
-  });
 });
